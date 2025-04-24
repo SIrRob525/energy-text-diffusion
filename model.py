@@ -90,7 +90,7 @@ class MaskedDiffusionModel(nn.Module):
         
         return logits
     
-    def sample(self, logits, x_t, temperature=1.0):
+    def sample(self, logits, x_t, t=None, temperature=1.0):
         mask = (x_t == self.mask_token_id)
         probs = F.softmax(logits / temperature, dim=-1)
         
@@ -119,7 +119,7 @@ class MaskedDiffusionModel(nn.Module):
             
             with torch.no_grad():
                 logits = self.backward(x_t, t_current)
-                x_0_pred = self.sample(logits, x_t, temperature)
+                x_0_pred = self.sample(logits, x_t, t_current, temperature)
                 
                 if i > 0:
                     t_next = torch.full((batch_size,), i-1, device=device)
