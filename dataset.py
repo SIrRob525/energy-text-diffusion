@@ -8,7 +8,7 @@ from hf_token import TOKEN
 from tqdm import tqdm
 
 def load_dataset(split="train", token=TOKEN):
-    return datasets.load_dataset("wikitext", "wikitext-103-v1", split=split, token=token)
+    return datasets.load_dataset("Skylion007/openwebtext", split="train", token=token, trust_remote_code=True)
 
 def add_mask_token(tokenizer):
     mask_token = "[MASK]"
@@ -20,52 +20,31 @@ def add_mask_token(tokenizer):
     
     return tokenizer, mask_token_id
 
-class WikiTextDataset(Dataset):
-    def __init__(self, split="train", sequence_length=1024, token=TOKEN, cache_dir="data"):
+class OpenWebTextDataset(Dataset):
+    def __init__(self, sequence_length=1024, token=TOKEN):
         self.sequence_length = sequence_length
-        self.raw_data = load_dataset(split=split, token=token)
+        self.raw_data = load_dataset(split="train", token=token)
         self.tokenizer = GPT2Tokenizer.from_pretrained("gpt2", token=token)
         
         if self.tokenizer.pad_token is None:
             self.tokenizer.pad_token = self.tokenizer.eos_token
         
         self.tokenizer, self.mask_token_id = add_mask_token(self.tokenizer)
-
-        cache_path = os.path.join(cache_dir, f"wikitext_{split}_{sequence_length}.pkl")
-        if os.path.exists(cache_path):
-            with open(cache_path, "rb") as f:
-                self.passages = pickle.load(f)
-                print(f"Dataset loaded from {cache_path}.")
-            return
-        os.makedirs(cache_dir)
-
-        self.passages = []
-        for item in tqdm(self.raw_data["text"], desc="Preparing dataset"):
-            if item.strip():
-                encoded = self.tokenizer.encode(item)
-                if len(encoded) > 0:  
-                    self.passages.append(encoded)
-        
-        with open(cache_path, "wb") as f:
-            pickle.dump(self.passages, f)
     
     def __len__(self):
-        return len(self.passages)
+        return len(self.raw_data)
     
     def __getitem__(self, idx):
-        passage = self.passages[idx]
-        
-        if len(passage) > self.sequence_length:
-            sequence = passage[:self.sequence_length]
-        else:
-            sequence = passage
-            padding = [self.tokenizer.pad_token_id] * (self.sequence_length - len(passage))
-            sequence = sequence + padding
+
+        passage = self.raw_data[idx]["text"]
+        sequence = self.tokenizer.encode(passage)[:self.sequence_length]
+        padding = [self.tokenizer.pad_token_id] * (self.sequence_length - len(sequence))
+        sequence = sequence + padding
         
         return torch.tensor(sequence, dtype=torch.long)
 
-def get_dataloader(batch_size=32, sequence_length=1024, split="validation", num_workers=4, shuffle=True):
-    dataset = WikiTextDataset(split=split, sequence_length=sequence_length)
+def get_dataloader(batch_size=32, sequence_length=1024, num_workers=4, shuffle=True):
+    dataset = OpenWebTextDataset(sequence_length=sequence_length)
     
     dataloader = DataLoader(
         dataset,
@@ -84,18 +63,18 @@ def decode_tokens(tokens, tokenizer):
     return tokenizer.decode(tokens)
 
 if __name__ == "__main__":
-    dataloader, tokenizer, mask_token_id = get_dataloader(batch_size=1, sequence_length=64, split="validation")
+    dataloader, tokenizer, mask_token_id = get_dataloader(batch_size=1, sequence_length=128)
     
     print(f"Mask token ID: {mask_token_id}")
-    print(f"Mask token: {tokenizer.convert_ids_to_tokens(mask_token_id)}")
+    print(f"Mask token: {tokenizer.convert_ids_to_tokens(mask_token_id)}\n")
 
     for batch in dataloader:
-        print(f"Batch shape: {batch.shape}")
+        print(f"Batch shape: {batch.shape}\n")
         
-        print(f"Batch: {batch}")
+        print(f"Batch: {batch}\n")
         
         sample_text = decode_tokens(batch[0], tokenizer)
-        print(f"Sample text: {sample_text}")
+        print(f"Sample text: {sample_text}\n")
         
         masked_sequence = batch[0].clone()
         mask_indices = torch.randint(0, masked_sequence.size(0), (masked_sequence.size(0) // 4,))
