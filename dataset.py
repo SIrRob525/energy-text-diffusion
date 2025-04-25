@@ -1,3 +1,5 @@
+import os
+import pickle
 import torch
 from torch.utils.data import Dataset, DataLoader
 from transformers import GPT2Tokenizer
@@ -19,7 +21,7 @@ def add_mask_token(tokenizer):
     return tokenizer, mask_token_id
 
 class WikiTextDataset(Dataset):
-    def __init__(self, split="train", sequence_length=1024, token=TOKEN):
+    def __init__(self, split="train", sequence_length=1024, token=TOKEN, cache_dir="data"):
         self.sequence_length = sequence_length
         self.raw_data = load_dataset(split=split, token=token)
         self.tokenizer = GPT2Tokenizer.from_pretrained("gpt2", token=token)
@@ -28,13 +30,24 @@ class WikiTextDataset(Dataset):
             self.tokenizer.pad_token = self.tokenizer.eos_token
         
         self.tokenizer, self.mask_token_id = add_mask_token(self.tokenizer)
-        
+
+        cache_path = os.path.join(cache_dir, f"wikitext_{split}_{sequence_length}.pkl")
+        if os.path.exists(cache_path):
+            with open(cache_path, "rb") as f:
+                self.passages = pickle.load(f)
+                print(f"Dataset loaded from {cache_path}.")
+            return
+        os.makedirs(cache_dir)
+
         self.passages = []
         for item in tqdm(self.raw_data["text"], desc="Preparing dataset"):
             if item.strip():
                 encoded = self.tokenizer.encode(item)
                 if len(encoded) > 0:  
                     self.passages.append(encoded)
+        
+        with open(cache_path, "wb") as f:
+            pickle.dump(self.passages, f)
     
     def __len__(self):
         return len(self.passages)
