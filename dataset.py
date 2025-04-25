@@ -1,5 +1,3 @@
-import os
-import pickle
 import torch
 from torch.utils.data import Dataset, DataLoader
 from transformers import GPT2Tokenizer
@@ -7,7 +5,7 @@ import datasets
 from hf_token import TOKEN
 from tqdm import tqdm
 
-def load_dataset(split="train", token=TOKEN):
+def load_dataset(token=TOKEN):
     return datasets.load_dataset("Skylion007/openwebtext", split="train", token=token, trust_remote_code=True)
 
 def add_mask_token(tokenizer):
@@ -23,7 +21,7 @@ def add_mask_token(tokenizer):
 class OpenWebTextDataset(Dataset):
     def __init__(self, sequence_length=1024, token=TOKEN):
         self.sequence_length = sequence_length
-        self.raw_data = load_dataset(split="train", token=token)
+        self.raw_data = load_dataset(token=token)
         self.tokenizer = GPT2Tokenizer.from_pretrained("gpt2", token=token)
         
         if self.tokenizer.pad_token is None:

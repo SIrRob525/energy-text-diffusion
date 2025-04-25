@@ -140,7 +140,7 @@ if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
     
-    dataloader, tokenizer, mask_token_id = get_dataloader(batch_size=1, sequence_length=64, split="validation")
+    dataloader, tokenizer, mask_token_id = get_dataloader(batch_size=1, sequence_length=64)
     
     model = MaskedDiffusionModel(
         vocab_size=len(tokenizer),
