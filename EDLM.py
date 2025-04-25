@@ -155,12 +155,12 @@ if __name__ == "__main__":
         print("\n--- Energy calculation ---\n")
         x_0_pred = model.sample(logits, x_t, t_tensor)
         
-        samples_for_energy = []
+        samples = []
         for i in range(3):
             x_0_sample = model.sample(logits, x_t, t_tensor)
-            samples_for_energy.append(x_0_sample)
+            samples.append(x_0_sample)
         
-        samples_tensor = torch.stack(samples_for_energy, dim=1)
+        samples_tensor = torch.stack(samples, dim=1)
         print(f"Samples tensor shape: {samples_tensor.shape}")
         energies = model.compute_energy(samples_tensor, x_t)
         print(f"Energy shape: {energies.shape}")
