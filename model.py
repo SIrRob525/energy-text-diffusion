@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from transformers import GPT2Config, GPT2Model
 from dataset import get_dataloader, decode_tokens
+from tqdm import tqdm
 
 class MaskedDiffusionModel(nn.Module):
     def __init__(
@@ -105,16 +106,12 @@ class MaskedDiffusionModel(nn.Module):
         
         return x_0_pred
     
-    def generate(self, batch_size=1, temperature=1.0, device="cuda", return_intermediates=False):
+    def generate(self, batch_size=1, temperature=1.0, device="cuda"):
         seq_length = self.max_seq_length
         
         x_t = torch.full((batch_size, seq_length), self.mask_token_id, dtype=torch.long, device=device)
-        
-        intermediates = [None] * self.num_timesteps if return_intermediates else None
-        if return_intermediates:
-            intermediates[self.num_timesteps-1] = x_t.clone()
-        
-        for i in range(self.num_timesteps-1, -1, -1):
+
+        for i in tqdm(range(self.num_timesteps-1, -1, -1), total=self.num_timesteps):
             t_current = torch.full((batch_size,), i, device=device)
             
             with torch.no_grad():
@@ -126,14 +123,8 @@ class MaskedDiffusionModel(nn.Module):
                     x_t, _ = self.forward(x_0_pred, t_next)
                 else:
                     x_t = x_0_pred
-            
-            if return_intermediates and i > 0:
-                intermediates[i-1] = x_t.clone()
         
-        if return_intermediates:
-            return x_t, intermediates
-        else:
-            return x_t
+        return x_t
 
 if __name__ == "__main__":
     
@@ -175,14 +166,8 @@ if __name__ == "__main__":
 
         print("\n--- Generation process ---\n")
         
-        _, intermediates = model.generate(batch_size=1, temperature=1.0, device=device, return_intermediates=True)
+        generated = model.generate(batch_size=1, temperature=1.0, device=device, verbose=True)
         
-        steps_to_show = [9, 5, 1, 0]
-        for step in steps_to_show:
-            step_text = decode_tokens(intermediates[step][0], tokenizer)
-            mask_count = (intermediates[step][0] == mask_token_id).sum().item()
-            mask_percentage = (mask_count / intermediates[step][0].size(0)) * 100
-            
-            print(f"Step {step}: {step_text}")
+        print(f"Final generated text: {decode_tokens(generated[0], tokenizer)}")
         
         break
