@@ -35,6 +35,8 @@ class EnergyDiffusionModel(MaskedDiffusionModel):
         
         self.ar_model = GPT2LMHeadModel.from_pretrained(ar_model_name, token=TOKEN)
         self.ar_model.eval()
+        for param in self.ar_model.parameters():
+            param.requires_grad = False
         
         self.importance_sampling_size = importance_sampling_size
         self.importance_sampling_window = importance_sampling_window
@@ -47,12 +49,12 @@ class EnergyDiffusionModel(MaskedDiffusionModel):
             diffusion_logits = self.backward(x_t, t)
             diffusion_log_probs = F.log_softmax(diffusion_logits, dim=-1)
             
-            ar_log_probs = torch.zeros(batch_size, num_samples, device=x_0_samples.device)
-            
-            for i in range(num_samples):
-                sample_x_0 = x_0_samples[:, i, :]
-                ar_outputs = self.ar_model(sample_x_0, labels=sample_x_0)
-                ar_log_probs[:, i] = -ar_outputs.loss
+            flat_x0 = x_0_samples.reshape(-1, seq_len)
+            ar_logits = self.ar_model(flat_x0).logits
+            ar_log_probs_full = F.log_softmax(ar_logits, dim=-1)
+            target_ids = flat_x0.unsqueeze(-1)
+            token_log_probs = ar_log_probs_full.gather(dim=2, index=target_ids).squeeze(-1)
+            ar_log_probs = token_log_probs.sum(dim=1).view(batch_size, num_samples)
             
             diffusion_log_probs_expanded = diffusion_log_probs.unsqueeze(1).expand(
                 batch_size, num_samples, seq_len, diffusion_log_probs.size(-1)
@@ -166,7 +168,7 @@ if __name__ == "__main__":
         
         samples_tensor = torch.stack(samples, dim=1)
         print(f"Samples tensor shape: {samples_tensor.shape}")
-        energies = model.compute_energy(samples_tensor, x_t)
+        energies = model.compute_energy(samples_tensor, x_t, t_tensor)
         print(f"Energy shape: {energies.shape}")
         
         print("\n--- Importance sampling ---\n")

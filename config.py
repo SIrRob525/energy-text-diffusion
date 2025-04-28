@@ -15,9 +15,10 @@ class EDLMConfig:
         
         self.learning_rate = 1e-4
         self.weight_decay = 0.001
-        self.warmup_steps = 4000
+        self.warmup_steps = 1000
         self.num_epochs = 1
         self.save_interval = 500
         self.output_dir = "checkpoints"
+        self.init_dir = "checkpoints"
         
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")

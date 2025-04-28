@@ -7,6 +7,11 @@ from EDLM import EnergyDiffusionModel
 from config import EDLMConfig
 from tqdm import tqdm
 
+
+def get_latest_checkpoint(checkpoint_dir):
+    checkpoint = os.path.join(checkpoint_dir, f"best_model.pt")
+    return checkpoint
+
 def train(config):
     device = config.device
     
@@ -28,6 +33,11 @@ def train(config):
         importance_sampling_window=config.importance_sampling_window,
         temperature=config.temperature
     ).to(device)
+
+    if config.init_dir is not None:
+        latest_checkpoint = get_latest_checkpoint(config.init_dir)
+        print(f"Loading checkpoint: {latest_checkpoint}")
+        model.load_state_dict(torch.load(latest_checkpoint, map_location=device, weights_only=False))
     
     optimizer = torch.optim.AdamW(
         model.parameters(),
@@ -61,14 +71,13 @@ def train(config):
                 device=device
             )
             
-            noised_batch, _ = model.forward(batch, timesteps)
+            noised_batch, mask = model.forward(batch, timesteps)
             
             logits = model.backward(noised_batch, timesteps)
             
-            loss = F.cross_entropy(
-                logits.view(-1, logits.size(-1)),
-                batch.view(-1)
-            )
+            logits_masked = logits[mask]      
+            target_masked = batch[mask]         
+            loss = F.cross_entropy(logits_masked, target_masked)
             
             loss.backward()
             
