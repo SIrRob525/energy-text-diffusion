@@ -97,12 +97,14 @@ class MaskedDiffusionModel(nn.Module):
         
         x_0_pred = x_t.clone()
         
-        batch_size, seq_length = x_t.shape
-        for b in range(batch_size):
-            for j in range(seq_length):
-                if mask[b, j]:
-                    token_probs = probs[b, j]
-                    x_0_pred[b, j] = torch.multinomial(token_probs, 1).item()
+        flat_probs = probs.reshape(-1, probs.size(-1))
+        flat_mask = mask.reshape(-1)
+        masked_indices = torch.nonzero(flat_mask).squeeze(1)
+        
+        if masked_indices.numel() > 0:
+            sampled_tokens = torch.multinomial(flat_probs[masked_indices], 1).squeeze(1)
+            flat_x_0_pred = x_0_pred.reshape(-1)
+            flat_x_0_pred[masked_indices] = sampled_tokens
         
         return x_0_pred
     
@@ -166,7 +168,7 @@ if __name__ == "__main__":
 
         print("\n--- Generation process ---\n")
         
-        generated = model.generate(batch_size=1, temperature=1.0, device=device, verbose=True)
+        generated = model.generate(batch_size=1, temperature=1.0, device=device)
         
         print(f"Final generated text: {decode_tokens(generated[0], tokenizer)}")
         

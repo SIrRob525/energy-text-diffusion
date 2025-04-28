@@ -67,9 +67,7 @@ def train(config):
             
             loss = F.cross_entropy(
                 logits.view(-1, logits.size(-1)),
-                batch.view(-1),
-                ignore_index=-100,
-                reduction='mean'
+                batch.view(-1)
             )
             
             loss.backward()

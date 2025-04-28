@@ -40,35 +40,34 @@ class EnergyDiffusionModel(MaskedDiffusionModel):
         self.importance_sampling_window = importance_sampling_window
         self.temperature = temperature
     
-    def compute_energy(self, x_0_samples, x_t):
+    def compute_energy(self, x_0_samples, x_t, t):
         with torch.no_grad():
             batch_size, num_samples, seq_len = x_0_samples.shape
             
-            diffusion_logits = self.backward(x_t, torch.zeros(batch_size, device=x_0_samples.device))
+            diffusion_logits = self.backward(x_t, t)
             diffusion_log_probs = F.log_softmax(diffusion_logits, dim=-1)
             
-            mask = (x_t == self.mask_token_id)
+            ar_log_probs = torch.zeros(batch_size, num_samples, device=x_0_samples.device)
             
-            energies = []
             for i in range(num_samples):
                 sample_x_0 = x_0_samples[:, i, :]
-                
-                ar_outputs = self.ar_model(sample_x_0.unsqueeze(0), labels=sample_x_0.unsqueeze(0))
-                ar_log_probs = -ar_outputs.loss
-                
-                diffusion_log_probs_gathered = torch.gather(
-                    diffusion_log_probs,
-                    dim=2,
-                    index=sample_x_0.unsqueeze(-1)
-                ).squeeze(-1)
-                
-                diffusion_log_probs_masked = diffusion_log_probs_gathered * mask.float()
-                diffusion_log_probs_sum = diffusion_log_probs_masked.sum(dim=1)
-                
-                sample_energy = -ar_log_probs + diffusion_log_probs_sum
-                energies.append(sample_energy)
+                ar_outputs = self.ar_model(sample_x_0, labels=sample_x_0)
+                ar_log_probs[:, i] = -ar_outputs.loss
             
-            energy = torch.stack(energies, dim=1)
+            diffusion_log_probs_expanded = diffusion_log_probs.unsqueeze(1).expand(
+                batch_size, num_samples, seq_len, diffusion_log_probs.size(-1)
+            )
+            
+            indices = x_0_samples.unsqueeze(-1)
+            diffusion_log_probs_gathered = torch.gather(
+                diffusion_log_probs_expanded, 
+                dim=3, 
+                index=indices
+            ).squeeze(-1)
+            
+            diffusion_log_probs_sum = diffusion_log_probs_gathered.sum(dim=2)
+        
+            energy = -ar_log_probs + diffusion_log_probs_sum
             
         return energy
     
@@ -84,21 +83,26 @@ class EnergyDiffusionModel(MaskedDiffusionModel):
         mask = (x_t == self.mask_token_id)
         probs = F.softmax(logits / temperature, dim=-1)
         
+        flat_probs = probs.reshape(-1, probs.size(-1))
+        flat_mask = mask.reshape(-1)
+        masked_indices = torch.nonzero(flat_mask).squeeze(1)
+        
+        if masked_indices.numel() == 0:
+            return x_t.clone()
+        
         samples = []
         for _ in range(self.importance_sampling_size):
             x_0_pred = x_t.clone()
+            flat_x_0_pred = x_0_pred.reshape(-1)
             
-            for b in range(batch_size):
-                for j in range(seq_length):
-                    if mask[b, j]:
-                        token_probs = probs[b, j]
-                        x_0_pred[b, j] = torch.multinomial(token_probs, 1).item()
+            sampled_tokens = torch.multinomial(flat_probs[masked_indices], 1).squeeze(1)
+            flat_x_0_pred[masked_indices] = sampled_tokens
             
             samples.append(x_0_pred)
         
         samples = torch.stack(samples, dim=1)
         
-        energies = self.compute_energy(samples, x_t)
+        energies = self.compute_energy(samples, x_t, t)
         weights = F.softmax(-energies, dim=1)
         
         selected_indices = torch.multinomial(weights, 1).squeeze(1)
@@ -172,14 +176,8 @@ if __name__ == "__main__":
 
         print("\n--- Generation process ---\n")
         
-        _, intermediates = model.generate(batch_size=1, device=device, return_intermediates=True)
+        generated = model.generate(batch_size=1, temperature=1.0, device=device)
         
-        steps_to_show = [9, 5, 1, 0]
-        for step in steps_to_show:
-            step_text = decode_tokens(intermediates[step][0], tokenizer)
-            mask_count = (intermediates[step][0] == mask_token_id).sum().item()
-            mask_percentage = (mask_count / intermediates[step][0].size(0)) * 100
-            
-            print(f"Step {step}: {step_text}")
+        print(f"Final generated text: {decode_tokens(generated[0], tokenizer)}")
         
         break
