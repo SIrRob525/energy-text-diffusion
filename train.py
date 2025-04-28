@@ -7,11 +7,6 @@ from EDLM import EnergyDiffusionModel
 from config import EDLMConfig
 from tqdm import tqdm
 
-
-def get_latest_checkpoint(checkpoint_dir):
-    checkpoint = os.path.join(checkpoint_dir, f"last_model.pt")
-    return checkpoint
-
 def train(config):
     device = config.device
     
@@ -35,9 +30,12 @@ def train(config):
     ).to(device)
 
     if config.init_dir is not None:
-        latest_checkpoint = get_latest_checkpoint(config.init_dir)
-        print(f"Loading checkpoint: {latest_checkpoint}")
-        model.load_state_dict(torch.load(latest_checkpoint, map_location=device, weights_only=False), strict=False)
+        latest_checkpoint = os.path.join(config.init_dir, f"last_model.pt")
+        if os.path.exists(latest_checkpoint):
+            print(f"Loading checkpoint: {latest_checkpoint}")
+            model.load_state_dict(torch.load(latest_checkpoint, map_location=device, weights_only=False), strict=False)
+        else:
+            print(f"Checkpoint not found: {latest_checkpoint}")
     
     optimizer = torch.optim.AdamW(
         model.parameters(),

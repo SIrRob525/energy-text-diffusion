@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from transformers import GPT2Config, GPT2Model
+from transformers import BertConfig, BertModel
 from dataset import get_dataloader, decode_tokens
 from tqdm import tqdm
 
@@ -25,7 +25,7 @@ class MaskedDiffusionModel(nn.Module):
         self.mask_token_id = mask_token_id
         self.num_timesteps = num_timesteps
         
-        config = GPT2Config(
+        config = BertConfig(
             vocab_size=vocab_size,
             n_positions=max_seq_length,
             n_embd=hidden_size,
@@ -37,9 +37,9 @@ class MaskedDiffusionModel(nn.Module):
             use_cache=False
         )
         
-        self.transformer = GPT2Model(config)
-        self.token_embedding = self.transformer.wte
-        self.position_embedding = self.transformer.wpe
+        self.transformer = BertModel(config)
+        self.token_embedding = self.transformer.embeddings.word_embeddings
+        self.position_embedding = self.transformer.embeddings.position_embeddings
         
         self.time_embedding = nn.Embedding(num_timesteps, hidden_size)
         
@@ -108,6 +108,22 @@ class MaskedDiffusionModel(nn.Module):
         
         return x_0_pred
     
+    def posterior_sample(self, x_t, x0_pred, t):
+        alpha_t = self.get_alpha_schedule(t)
+        alpha_prev = self.get_alpha_schedule(t - 1) if t > 0 else torch.ones_like(alpha_t)
+
+        mask = (x_t == self.mask_token_id)
+        
+        posterior_probs = (
+            (alpha_prev - alpha_t) / (1 - alpha_t) * F.one_hot(x0_pred, self.vocab_size) +
+            (1 - alpha_prev) / (1 - alpha_t) * F.one_hot(
+                torch.full_like(x0_pred, self.mask_token_id), self.vocab_size
+            )
+        )
+        x_t[mask] = torch.multinomial(posterior_probs[mask].float(), 1).squeeze()
+        
+        return x_t
+
     def generate(self, batch_size=1, temperature=1.0, device="cuda"):
         seq_length = self.max_seq_length
         
@@ -122,7 +138,7 @@ class MaskedDiffusionModel(nn.Module):
                 
                 if i > 0:
                     t_next = torch.full((batch_size,), i-1, device=device)
-                    x_t, _ = self.forward(x_0_pred, t_next)
+                    x_t = self.posterior_sample(x_t, x_0_pred, t_next)
                 else:
                     x_t = x_0_pred
         
