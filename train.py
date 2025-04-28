@@ -9,7 +9,7 @@ from tqdm import tqdm
 
 
 def get_latest_checkpoint(checkpoint_dir):
-    checkpoint = os.path.join(checkpoint_dir, f"best_model.pt")
+    checkpoint = os.path.join(checkpoint_dir, f"last_model.pt")
     return checkpoint
 
 def train(config):
@@ -37,7 +37,7 @@ def train(config):
     if config.init_dir is not None:
         latest_checkpoint = get_latest_checkpoint(config.init_dir)
         print(f"Loading checkpoint: {latest_checkpoint}")
-        model.load_state_dict(torch.load(latest_checkpoint, map_location=device, weights_only=False))
+        model.load_state_dict(torch.load(latest_checkpoint, map_location=device, weights_only=False), strict=False)
     
     optimizer = torch.optim.AdamW(
         model.parameters(),
