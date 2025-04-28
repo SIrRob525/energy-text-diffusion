@@ -41,7 +41,7 @@ class MaskedDiffusionModel(nn.Module):
         self.token_embedding = self.transformer.wte
         self.position_embedding = self.transformer.wpe
         
-        self.time_embedding = nn.Embedding(max_seq_length, hidden_size)
+        self.time_embedding = nn.Embedding(num_timesteps, hidden_size)
         
         self.output_projection = nn.Linear(hidden_size, vocab_size)
     
