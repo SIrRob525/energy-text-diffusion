@@ -77,8 +77,8 @@ class MaskedDiffusionModel(nn.Module):
         token_embeddings = self.token_embedding(x_t)
         position_embeddings = self.position_embedding(positions)
         
-        t_normalized = (t.float() / self.num_timesteps).clamp(0, 1)
-        t_embedding_idx = (t_normalized * (self.max_seq_length - 1)).long()
+        t_normalized = (t.float() / (self.num_timesteps - 1)).clamp(0, 1)
+        t_embedding_idx = (t_normalized * (self.num_timesteps - 1)).long()
         t_expanded = t_embedding_idx.view(-1, 1).expand(-1, seq_length)
         time_embeddings = self.time_embedding(t_expanded)
         
